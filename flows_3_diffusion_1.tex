@@ -1,0 +1,147 @@
+\documentclass{scrartcl}
+\usepackage{notes}
+\usepackage[numbers]{natbib}
+\usepackage{cleveref}
+
+
+\title{Diffusion 1: Noising, Denoising, and Score Matching}
+\setheader{Diffusion 1: Noising, Denoising, and Score Matching}
+\date{November, 2025}
+
+\begin{document}
+
+\maketitle
+In these notes, we begin our exploration of what have come to be known as \textit{diffusion models}. In doing so, we make no attempt at tracing the chronological development of these models - for the very earliest papers could not have foreseen where the field now sits - and instead follow what is in hindsight a natural path toward the current state of affairs. 
+Recall that our broad aim is to construct some learned approximation $p(x;\theta)$ (and importantly, one that we \textit{can} sample from) of the true \textit{data distribution} $\pdata$, and that we have access to some \textit{limited} number of samples - the \textit{training set} - with which we can evaluate expectations with respect to $\pdata$. Despite this, we assume access to no other information about $\pdata$, such as the ability to sample outside our training set, or access to the density.
+With that in mind, these notes are organized as follows:
+\begin{itemize}
+    \item In \cref{sec:langevin}, we derive the \textit{Langevin dynamics}, a family of noising processes (SDE) which has a stationary distribution some specified distribution of interest. We then show that evolving some second distribution $p_t$ using the Langevin dynamics of a distribution $p_\infty$ pushes $p_t$ toward $p_\infty$. In particular, the probability path $p_t$ under the Langevin dynamics of $p_\infty$ corresponds to the \textit{gradient flow} of the relative entropy functional $\dkl{p_t}{p_\infty}$ in the Wasserstein-2 (optimal transport) geometry.
+    \item In \cref{sec:ou}, we formulate \textit{Ornstein-Uhlenbeck} (OU) processes, a family of noising processes obtained as the Langevin dynamics of Gaussians, and which will serve as our general-purpose noising processes, transforming $\pdata$ into an approximate Gaussian. We further derive the transition statisics of general OU processes. 
+    \item In \cref{sec:reverse_diffusion}, we take the first step toward realizing SDEs as generative models by deriving a \textit{reverse SDE}, which allows us to recover $\pdata$ from a Gaussian. However, the reverse SDE requires access to the generally intractable \textit{Stein score} $\nabla \log p_t(x_t)$.
+    \item In \cref{sec:score_matching}, we realize the promise of the reverse SDE by deriving an algorithm, \textit{score matching}, by which a neural network $s_t(x;\theta)$ may be used to approximate the score, and thus facilitate the simulation of the reverse SDE.
+\end{itemize}
+
+\section{Langevin Dynamics}
+\label{sec:langevin}
+
+Recall that the time evolution of a probability density $p_t$ under the SDE
+\begin{equation}
+\d x_t = \mu_t(x_t)\, \d t + \sigma_t \d w_t,
+\end{equation}
+is given by the Fokker-Planck equation
+\begin{equation}
+    \partial_t p_t = - \nabla \cdot (\mu_t p_t) + \frac{\sigma_t^2}{2} \Delta p_t.
+\end{equation}
+Setting the right-hand side to zero yields
+\begin{align*}
+    0 &= - \nabla \cdot (\mu_t p_t) + \frac{\sigma_t^2}{2} \Delta p_t\\
+      &= \nabla \cdot \left[\frac{\sigma_t^2}{2} \nabla p_t - \mu_t p_t\right],
+\end{align*}
+so that it is sufficient that the bracket term vanishes. This gives
+\begin{equation}
+    \mu_t = \frac{1}{p_t} \frac{\sigma_t^2}{2} \nabla p_t = \frac{\sigma_t^2}{2} \nabla \log p_t.
+\end{equation}
+We thus arrive at the \textit{Langevin dynamics}
+\begin{equation}
+    \d x_t = \frac{\sigma_t^2}{2} \nabla_x \log p(x_t)\, \d t + \sigma_t\, \d w_t
+\end{equation}
+which has $p$ as its stationary distribution. Note that we've dropped the subscript $t$ on $p$ to emphasize it being stationary.
+
+\begin{remarkbox}
+When $p$ is rewritten in the Boltzmann form $p(x) = \frac{1}{Z} \exp\left(-\frac{1}{kT} U(x)\right)$, the Langevin dynamics become
+\begin{equation}
+    \d x_t = - \frac{\sigma_t^2}{2kT} \nabla_x U(x_t)\, \d t + \sigma_t\, \d w_t.
+\end{equation}
+By rescaling time by a factor of $2kT$, this can be written equivalently as
+\begin{equation}
+    \d x_t = \sigma_t^2\nabla_x U(x_t)\, \d t + \sigma_t\sqrt{2kT}\, \d w_t.
+\end{equation}
+Note that in the zero-temperature limit $T \to 0$ (and with $\sigma_t = 1$), we recover classical gradient descent.
+\end{remarkbox}
+The value of the Langevin dynamics lies not in that its preservation of $p$, but rather that it \textit{drives other distributions towards $p$}. We make this more precise in the next section.
+\subsection{Langevin Dynamics as a Gradient Flow}
+First, let us briefly describe the Wasserstein-2 geometry, which basically answers the question: how do we take the space of distributions (densities $p \in \mathcal{P}(\RR^d)$ with finite second moment), endow it with some sort of tangent space, and equip this tangent space with some local notion of distance (a metric tensor) which agrees with a particular global notion of distance, the Wasserstein-2, or $L^2$ optimal transport distance:
+\begin{equation}
+\mathcal{W}_2^2(p,q) \triangleq \inf_{\pi \text{  admissible}} \int \pi(x,y)\norm{x - y}_2^2 \d x \d y. 
+\end{equation}
+A remarkable result due to Bernamou and Brenier establishes a more tractable, dynamic (cite Villani), characterization of $\mathcal{W}_2^2$ as 
+\begin{equation}
+    \begin{aligned}
+        \mathcal{W}_2^2(p, q) &\triangleq \inf_{\blacksquare} \int_0^1 \int_{\RR^d} \norm{\mu_t(x)}_2^2 p_t(x) \d x \d t\\
+        \blacksquare &= \left\{p_t, \mu_t \mid p_0 = p, p_1 = q, \partial_t p_t = - \nabla \cdot [ \mu_t p_t ], \mu_t \in L^2(p_t) \right\}
+    \end{aligned}
+    \label{eq:bb}
+\end{equation}
+
+The idea being that $\mathcal{W}_2^2$ is given by the minimum kinetic energy vector field which transports $p_0$ to $p_1$ in unit time. This suggests two things: First, that perturbations of $p_t$ might reasonably be parameterized via the vector fields which facilitate the perturbation (via the continuity equation). Note that this is especially useful because $\mathcal{P}_2$ isn't even closed under arbitrary zero-mean perturbation, so that we could not have possibly hoped to realize our tangent space that way. 
+Second, we care about the \textit{kinetic energy} $\norm{\mu_t}^2_{p_t} \triangleq \int_{\RR^d}\norm{\mu_t}_2^2 \d x$ of our vector field. The first point suggests definining $T_{p_t}\mathcal{P}_2(\RR^d) = \mu_t \in L^2(p_t)$, but the second point suggest we may be able to do even better. We formulate this claim in the following result.
+\begin{resultbox}[Minimal Energy Vector Fields are Gradient Fields]
+For fixed $t, p_t$ it is true that among $\mu_t$ all solutions to the continuity equation $\partial_t p_t = - \nabla \cdot [ \mu_t p_t ]$, the kinetic energy $\norm{\mu_t}^2_{p_t}$ is minimized when $\mu_t = \nabla \phi$ is given as the gradient field of some scalar potential $\phi$. Further, the choice of $\phi$ is unique.
+\end{resultbox}
+\begin{proof}
+    The big idea is to show that $L^2(p_t)$ admits the orthogonal \textit{Helmholtz-Hodge} decomposition 
+    \begin{equation}
+    L^2(p_t) = \underbrace{\{\nabla \phi\}}_{\text{gradient fields}} \oplus \underbrace{\{\mu_t \mid \nabla \cdot [p_t \mu_t] = 0\}}_{\text{divergence-free vector fields}}. \label{eq:hh}
+    \end{equation}
+    In particular, the two subspaces are orthogonal (kinetic energies add) and latter is precisely the kernel of the RHS of the continuity equation, so that the minumum energy vector field has zero divergence-free component. We now flesh out this argument in detail.
+    First, set $V = \{\nabla \phi\}$ denote the space of gradient fields, so that for $L^2(p_t) = V + V^T$. Then any $v\in L^2(p_t)$ can be rewritten as $\nabla \phi + u$, for $u \in V^T$. In particular, $u$ is orthogonal to every element $\nabla \phi'$ of $V$. Thus, it follows from integration by parts and the divergence theorem ($p_t$ has finite second moment), that
+    \begin{equation}
+        \int_{\RR^d} \nabla \phi \cdot u p_t(x) \d x = - \int_{\RR^d}\phi \nabla \cdot [p_t(x)u(x)] \d x
+        \label{eq:hh_orthog}
+    \end{equation}
+    \textit{for all} $\phi$, which is enough to imply that $\nabla \cdot [p_t(x)u(x)] = 0$ everywhere. This shows that $V^T$ is contained in the divergence free subspace, and the other direction is similarly direct. We therefore arrive at \cref{eq:hh}. 
+    To finish, note that if $v = \nabla \phi + u$, $u \in V^T$, solves the continuity equation, then so does $\nabla \phi$ ($u$ contributes nothing to the RHS by construction), and 
+    \begin{equation}
+        \norm{\mu_t}^2_{p_t} = \norm{\nabla \phi}^2_{p_t} + \norm{\mu_t}^2_{p_t} \ge \norm{\nabla \phi}^2_{p_t}
+    \end{equation}
+    so that a solution with energy less than or equal to that of $v$ is recovered in $\nabla \phi$ and we are done. Uniqueness is an immediate consequence of the orthogonal decomposition: if two gradient fields satisfy the continuity equation, their difference must be divergence free, implying that it lies in the intersection $V \cap V^T = \{0\}$.
+    
+\end{proof}
+
+It follows that we may instead take the tangent space to be the much smaller set of gradient fields 
+\begin{equation}
+T_{p_t}\mathcal{P}_2(\RR^d) = \{\nabla \phi\}\footnote{ What $\phi$ do we consider? Those for which the corresponding gradient field sits in $L^2(p_t)$. Unclear to me as I type this whether this set admits a nicer description. For our purposes though, it doesn't really matter.}
+\end{equation}
+Further, \cref{eq:bb} suggests that we take the metric tensor the standard inner product on $L^2(p_t)$, viz.,
+\begin{equation}
+\langle \nabla \phi_1, \nabla \phi_2 \rangle_{p_t} = \int_{\RR^d} \nabla \phi_1 \cdot \nabla \phi_2 p_t(x) \d t.
+\end{equation}
+As I type this the choice of realizing our tangent space as $ \{\nabla \phi\} \subseteq L^2(p_t)$ is even more natural: the $\nabla$ around $\phi_1$ together with the $p_t(x)$ conspire, via the divergence theorem and integration by parts (see \cref{eq:hh_orthog}), to turn orthogonality in the tangent space into a statement about the $\nabla \cdot [p_t \nabla \phi_2]$ (the RHS of the continuity equation).
+Let let us now return to the Langevin dynamics and quantify the distance between where we are, $p_t$, and where we want to go, $p_\infty$, as the KL-divergence $\dkl{p_t}{p_{\infty}}$. How then do we perturb $p_t$ optimally so as to decrease this distance the fastest? Consider some perturbation $\nabla \phi \in T_{p_t}\mathcal{P}_2(\RR^d)$. Then, with this perturbation,
+\begin{align*}
+    \frac{\d}{\d t} \dkl{p_t}{p_{\infty}} &\triangleq \int_{\RR^d} \left(\frac{\d}{\d p_t(x)} p_t \log \frac{p_t(x)}{p_\infty(x)}\right) \partial_t p_t(x)\, \d x\\
+    &= \int_{\RR^d} \left(1 + \log \frac{p_t(x)}{p_\infty(x)}\right) (- \nabla \cdot [p_t \nabla \phi])\, \d x\\
+    &=\int_{\RR^d} \nabla \left(1 + \log \frac{p_t(x)}{p_\infty(x)}\right) \cdot (p_t \nabla \phi)\, \d x\\
+    &= \int_{\RR^d} \nabla \log \frac{p_t(x)}{p_\infty(x)} \cdot (- \nabla \phi) p_t(x)\, \d x\\
+    &= \langle  \nabla \log \frac{p_t(x)}{p_\infty(x)}, \nabla \phi \rangle_{p_t}
+\end{align*}
+which we recognize as our chosen metric tensor. Thus, for fixed kinetic energy $\norm{\nabla \phi}_{p_t}$, the steepest descent is obtained by taking $\phi = - \log \frac{p_t(x)}{p_\infty(x)} = \log \frac{p_\infty(x)}{p_t(x)}  $. Plugging back into the continuity equation (which we recall is the noise-less special case of the Fokker-Planck equation), we obtain
+\begin{align*}
+\partial_t p_t &= - \nabla \cdot \left[p_t \nabla \log \frac{p_\infty(x)}{p_t(x)}\right]\\
+&= -\nabla \cdot \left[p_t \log p_\infty(x)\right] + \Delta p_t(x)
+\end{align*}
+which is precisely the same time-evolution as is given by the Langevin dynamics
+\begin{equation}
+    \d x_t = \nabla_x \log p(x_t)\, \d t + \sqrt{2}\, \d w_t.
+\end{equation}
+We thus come full circle to the promised mouthful: that the Langevin dynamics yield the gradient flow of the relative entropy functional in the Wasserstein-2 geometry.
+
+\section{Ornstein-Uhlenbeck Processes}
+\label{sec:ou}
+TODO.
+\section{Reverse Diffusion Processes}
+\label{sec:reverse_diffusion}
+TODO.
+\section{Score Matching}
+\label{sec:score_matching}
+TODO.
+\section{Concluding Remarks}
+TODO.
+\label{sec:remarks}
+What we have covered, what we haven't covered, and a note on variance-exploding diffusion processes as the gradient flows of the entropy functional (which can be seen as the limiting case of the relative entropy functional).
+
+\bibliographystyle{plainnat} % or plain, alpha, etc.
+\bibliography{flows_3}         % looks for flows.bib
+
+
+\end{document} 

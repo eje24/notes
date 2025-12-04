@@ -14,6 +14,7 @@
 
 
 \section{Generative Modeling}
+\todo{Add in discussion about how we can generally interact with the target distribution by sampling, so that any objective function should ideally be formulated as an expectation with resect to the true distribution.}
 The premise of modern generative modeling, at least in the context of machine learning, is that the task of \textit{generation} can be framed as one of \textit{sampling} from the appropriate probability distribution $p(x)$. For example, the generation of a 28 by 28 RGB image can be modeled as sampling from a hypothetical distribution $p_{\textit{image}}(x) \in \mathcal{P}(\mathbb{R}^{28\times28\times3})$.
 
 \begin{problembox}
@@ -173,7 +174,7 @@ x_1 &= x_0 + \int_0^1 u_t(x_t;\theta)\, \d t\\
 \end{equation}
 and that our objective remains to obtain
 \begin{equation}
-    \theta^\ast \triangleq \triangleq \argmax_{\theta}\EE_{x_1 \sim \pdata} \left[\mathcal{L}(x_1;\theta)\right]\\
+    \theta^\ast \triangleq \argmax_{\theta}\EE_{x_1 \sim \pdata} \left[\mathcal{L}(x_1;\theta)\right]\\
     \mathcal{L}(x_1; \theta) \triangleq \log p(x; \theta).
 \end{equation}
 To this end, we seek an expression for $\nabla_\theta \mathcal{L}(\theta)$. 
@@ -194,16 +195,41 @@ Recall that traditionally, the gradients of a a loss with respect to a neural ne
 
 
 The takeaway from \cref{fig:backprop} is that the weight gradients $\frac{\partial \mathcal{L}}{\partial \theta}$ are the \textit{leaves} of the backpropagation graph. 
-To get a handle on them, we must first get a grip on the activation gradients $\frac{\partial \mathcal{L}}{\partial x_t}$.
+To compute these, we must simultaneously compute the gradients $\frac{\partial \mathcal{L}}{\partial x_t}$. 
+In the discrete setting of \cref{fig:backprop}, the intermediate states $x_t$ are often referred to as \textit{activations}, so that we might refer to $\frac{\partial \mathcal{L}}{\partial x_t}$ as activation gradients. 
+In order to get an intuitive sense for what these gradients should be, let's consider a discretization of our continuous normalizing flow, and see about computing the gradients in this slightly similar setting. 
+In particular, let $\mathbf{t} \triangleq \{t_i\}_{i=0}^N$ with $0 = t_0 < \cdots < t_N = 1$, and consider 
+\begin{equation}
+    \begin{aligned}
+    x_{t_{i+1}} &= x_{t_i} + u_{t_i}(x_{t_i},t;\theta)\, \Delta t_i\\
+    \mathcal{L}(x;\theta) &= \log p_0(x_0) - \sum_{i=0}^N \nabla \cdot u_{t_i}(x_{t_i}; \theta)\, \Delta t_i
+    \end{aligned}
+    \label{eq:discrete_cnf_setup}
+\end{equation}
+as a discrete analog of \cref{eq:cnf_setup}. Before we dive in, and to make our task conceptually clearer, observe that sensitivity of $\mathcal{L}$ to a perturbation of $\theta$ (i.e., $\frac{\partial \mathcal{L}}{\partial \theta}$) naturally decomposes into the sum of sensitivities of $\mathcal{L}$ with respect to the perturbations of $\theta$ at each distinct timestep $t_i$. We will therefore adopt the notation $\theta_{t_i}$ to refer to the (uniform) value of $\theta$ at $t_i$, and so that $\pdv{\mathcal{L}}{\theta_{t_i}}$ is understood to denote the sensitivity of $\mathcal{L}$ to $\theta_{t_i}$ if the value of $\theta$ at all other timesteps are held constant.
+For brevity, we will henceforth denote by $a^x_{t_i}$ the activation gradient $\frac{\partial \mathcal{L}}{\partial x_{t_i}}$, and by $a^\theta_{t_i}$ the weight gradient $\frac{\partial \mathcal{L}}{\partial \theta_{t_i}}$. Then, it follows immediately from \cref{eq:discrete_cnf_setup} that $a^x_{t_i}$ satisfies the recursion
+\begin{equation*}
+a^x_{t_i} = \underbrace{a^x_{t_{i+1}} \frac{\partial x_{t_{i+1}}}{\partial x_{t_i}}}_{\text{upstream sensitivity}} - \underbrace{\frac{\partial}{\partial x_{t_i}} \nabla \cdot u_{t_i}(x_{t_i},t;\theta_{t_i}) \Delta t_i}_{\text{direct sensitivity}},
+\end{equation*}
+which makes precise the observation that perturbing $x_{t_i}$ affects $\mathcal{L}$ \textit{indirectly} by perturbing the values of the downstream $x_{t_{>i}}$, as well as \textit{directly} via the loss contribution in $\nabla \cdot u_{t_i}(x_{t_i},t_i;\theta_{t_i})$. Plugging in $\frac{\partial x_{t_{i+1}}}{\partial x_{t_i}} = I + \Delta t_i  \frac{\partial u_{t_i}}{\partial x_{t_i}}$, and rearranging yields
+\begin{equation*}
+\frac{a^x_{t_{i+1}} - a^x_{t_{i}}}{\Delta t_i} = -a^x_{t_{i+1}} \frac{\partial u_{t_i}}{\partial x_{t_i}} + \frac{\partial}{\partial x_{t_i}} \nabla \cdot u_{t_i}(x_{t_i},t_i;\theta_{t_i}).
+\end{equation*}
+Finally, taking $\Delta t_i \to 0$ suggests that in the infinite limit, $a_t^x$ satisfies $\frac{\d}{\d t} a^x_t = -a^x_t \frac{\partial u_t}{\partial x_t} + \frac{\partial}{\partial x_t} \nabla \cdot u_t(x_t,t;\theta_{t_i})$. For $a^\theta_t$, we similarly derive the recurrence
+\begin{equation*}
+    a^\theta_{t_i} = \underbrace{a^x_{t_{i+1}} \frac{\partial x_{t_{i+1}}}{\partial \theta_{t_i}}}_{\text{upstream sensitivity}} - \underbrace{\frac{\partial}{\partial \theta_{t_i}} \nabla \cdot u_{t_i}(x_{t_i},t;\theta_{t_i}) \Delta t_i}_{\text{direct sensitivity}},
+\end{equation*}
+
+
 
 \begin{resultbox}[Adjoint state IVP \citep{neural_ode}]
 The \textit{adjoint state} \begin{equation} a_t = \begin{bmatrix}a_t^x & a_t^\theta \end{bmatrix}^T \triangleq \begin{bmatrix} \frac{\partial \mathcal{L}(x_t; \theta)}{\partial x_t } \frac{\partial \mathcal{L}(x_t; \theta)}{\partial \theta_t}\end{bmatrix}^T\end{equation} satisfies the IVP
 \begin{equation}
 \frac{\d}{\d t} \begin{bmatrix}a_t^x \\ a_t^\theta \end{bmatrix} = \begin{bmatrix} 
     -a_t^x\frac{\partial u_t}{\partial x_t} + \frac{\partial}{\partial x_t} \nabla \cdot u_t(x_t; \theta) \\
-    -a_t^x \frac{\partial u_t}{\partial \theta} + \frac{\partial}{\partial \theta_t} \nabla \cdot u_t(x_t; \theta)
+    -a_t^x \frac{\partial u_t}{\partial \theta} + \frac{\partial}{\partial \theta_t} \nabla \cdot u_t(x_t; \theta).
 \end{bmatrix}
-\end{equation}.
+\end{equation}
 \end{resultbox}
 
 \begin{proof*}{Proof sketch}

@@ -37,6 +37,10 @@
     \renewcommand{\header}{#1}
 }
 
+\newcommand{\todo}[1]{
+    \textcolor{red}{#1}
+}
+
 \newcounter{currentproblem} %incremented when 
 \NewDocumentCommand{\currentproblemname}{}{}
 
@@ -131,19 +135,6 @@
     postheadspace=1em,
 ]{boxedremarkstyle}
 
-\declaretheoremstyle[
-    spaceabove=6pt, spacebelow=6pt,
-    headfont=\normalfont\bfseries\sffamily\color{\remarkcolor},
-    bodyfont=\normalfont,
-    postheadspace=1em,
-]{boxedideastyle}
-
-\declaretheoremstyle[
-    spaceabove=6pt, spacebelow=6pt,
-    headfont=\normalfont\bfseries\sffamily\color{\remarkcolor},
-    bodyfont=\normalfont,
-    postheadspace=1em,
-]{boxedbackgroundstyle}
 
 \declaretheorem[style=boxedplainstyle,name=Theorem, sibling=theorem]{boxedtheorem}
 \declaretheorem[style=boxedplainstyle,name=Lemma, sibling=theorem]{boxedlemma}
@@ -157,8 +148,10 @@
 \declaretheorem[style=boxeddefstyle,name=Example, sibling=theorem]{boxedexample}
 \declaretheorem[style=boxeddefstyle,name=Question,sibling=theorem]{boxedquestion}
 \declaretheorem[style=boxedremarkstyle,name=Remark, sibling=theorem]{boxedremark}
-\declaretheorem[style=boxedideastyle,name=Idea, sibling=theorem]{boxedidea}
-\declaretheorem[style=boxedbackgroundstyle,name=Background, sibling=theorem]{boxedbackground}
+\declaretheorem[style=boxedremarkstyle,name=Idea, sibling=theorem]{boxedidea}
+\declaretheorem[style=boxedremarkstyle,name=Background, sibling=theorem]{boxedbackground}
+\declaretheorem[style=boxedremarkstyle,name=Intuition, sibling=theorem]{boxedintuition}
+
 
 
 \foreach \env in {lemma,theorem,proposition,conjecture,corollary,claim,definition,remark,boxedtheorem,boxedlemma,boxedproposition,boxedcorollary,boxedconjecture,boxedclaim,boxeddefinition,boxedproblem,boxedexample,boxedquestion,boxedremark}{
@@ -240,6 +233,7 @@
 \newenvironment{remarkbox}{\begin{remarkframe}\begin{boxedremark}}{\end{boxedremark}\end{remarkframe}}
 \newenvironment{ideabox}{\begin{remarkframe}\begin{boxedidea}}{\end{boxedidea}\end{remarkframe}}
 \newenvironment{backgroundbox}{\begin{remarkframe}\begin{boxedbackground}}{\end{boxedbackground}\end{remarkframe}}
+\newenvironment{intuitionbox}{\begin{remarkframe}\begin{boxedintuition}}{\end{boxedintuition}\end{remarkframe}}
 
 
 
