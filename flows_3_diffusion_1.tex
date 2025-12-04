@@ -12,7 +12,7 @@
 
 \maketitle
 In these notes, we begin our exploration of what have come to be known as \textit{diffusion models}. In doing so, we make no attempt at tracing the chronological development of these models - for the very earliest papers could not have foreseen where the field now sits - and instead follow what is in hindsight a natural path toward the current state of affairs. 
-Recall that our broad aim is to construct some learned approximation $p(x;\theta)$ (and importantly, one that we \textit{can} sample from) of the true \textit{data distribution} $\pdata$, and that we have access to some \textit{limited} number of samples - the \textit{training set} - with which we can evaluate expectations with respect to $\pdata$. Despite this, we assume access to no other information about $\pdata$, such as the ability to sample outside our training set, or access to the density.
+Recall that our broad aim is to construct some learned approximation $p(x;\theta)$ (and importantly, one that we \textit{can} sample from) of the true \textit{data distribution} $\pdata$, from which we have access to some \textit{limited} number of samples - the \textit{training set} - with which we can evaluate expectations with respect to $\pdata$. Despite this, we assume access to no other information about $\pdata$, such as the ability to sample outside our training set, or access to the density.
 With that in mind, these notes are organized as follows:
 \begin{itemize}
     \item In \cref{sec:langevin}, we derive the \textit{Langevin dynamics}, a family of noising processes (SDE) which has a stationary distribution some specified distribution of interest. We then show that evolving some second distribution $p_t$ using the Langevin dynamics of a distribution $p_\infty$ pushes $p_t$ toward $p_\infty$. In particular, the probability path $p_t$ under the Langevin dynamics of $p_\infty$ corresponds to the \textit{gradient flow} of the relative entropy functional $\dkl{p_t}{p_\infty}$ in the Wasserstein-2 (optimal transport) geometry.
@@ -64,7 +64,7 @@ First, let us briefly describe the Wasserstein-2 geometry, which basically answe
 \begin{equation}
 \mathcal{W}_2^2(p,q) \triangleq \inf_{\pi \text{  admissible}} \int \pi(x,y)\norm{x - y}_2^2 \d x \d y. 
 \end{equation}
-A remarkable result due to Bernamou and Brenier establishes a more tractable, dynamic (cite Villani), characterization of $\mathcal{W}_2^2$ as 
+A remarkable result due to Benamou and Brenier establishes a more tractable, dynamic \citep{villani2021topics}, characterization of $\mathcal{W}_2^2$ as 
 \begin{equation}
     \begin{aligned}
         \mathcal{W}_2^2(p, q) &\triangleq \inf_{\blacksquare} \int_0^1 \int_{\RR^d} \norm{\mu_t(x)}_2^2 p_t(x) \d x \d t\\
@@ -106,7 +106,7 @@ Further, \cref{eq:bb} suggests that we take the metric tensor the standard inner
 \begin{equation}
 \langle \nabla \phi_1, \nabla \phi_2 \rangle_{p_t} = \int_{\RR^d} \nabla \phi_1 \cdot \nabla \phi_2 p_t(x) \d t.
 \end{equation}
-As I type this the choice of realizing our tangent space as $ \{\nabla \phi\} \subseteq L^2(p_t)$ is even more natural: the $\nabla$ around $\phi_1$ together with the $p_t(x)$ conspire, via the divergence theorem and integration by parts (see \cref{eq:hh_orthog}), to turn orthogonality in the tangent space into a statement about the $\nabla \cdot [p_t \nabla \phi_2]$ (the RHS of the continuity equation).
+As I type this the choice to take our tangent space to be $ \{\nabla \phi\} \subseteq L^2(p_t)$ seems even more natural: the $\nabla$ around $\phi_1$ together with the $p_t(x)$ conspire, via the divergence theorem and integration by parts (see \cref{eq:hh_orthog}), to turn orthogonality in the tangent space into a statement about the $\nabla \cdot [p_t \nabla \phi_2]$ (the RHS of the continuity equation).
 Let let us now return to the Langevin dynamics and quantify the distance between where we are, $p_t$, and where we want to go, $p_\infty$, as the KL-divergence $\dkl{p_t}{p_{\infty}}$. How then do we perturb $p_t$ optimally so as to decrease this distance the fastest? Consider some perturbation $\nabla \phi \in T_{p_t}\mathcal{P}_2(\RR^d)$. Then, with this perturbation,
 \begin{align*}
     \frac{\d}{\d t} \dkl{p_t}{p_{\infty}} &\triangleq \int_{\RR^d} \left(\frac{\d}{\d p_t(x)} p_t \log \frac{p_t(x)}{p_\infty(x)}\right) \partial_t p_t(x)\, \d x\\
@@ -124,7 +124,7 @@ which is precisely the same time-evolution as is given by the Langevin dynamics
 \begin{equation}
     \d x_t = \nabla_x \log p(x_t)\, \d t + \sqrt{2}\, \d w_t.
 \end{equation}
-We thus come full circle to the promised mouthful: that the Langevin dynamics yield the gradient flow of the relative entropy functional in the Wasserstein-2 geometry.
+We thus come full circle to the promised mouthful: that the Langevin dynamics yield the gradient flow of the relative entropy functional in the Wasserstein-2 geometry. For a more technical treatment see \citep{ambrosio2005gradient} (Lemma 10.4.1).
 
 \section{Ornstein-Uhlenbeck Processes}
 \label{sec:ou}
